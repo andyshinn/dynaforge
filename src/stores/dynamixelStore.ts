@@ -1,6 +1,6 @@
 import { reactive, computed, readonly } from 'vue'
-import type { DeviceInfo, CommunicationDevice } from '../dynamixel-controller'
-import type { ConnectionSettings } from '../settings-service'
+import type { DeviceInfo, CommunicationDevice } from '../services/dynamixel-controller'
+import type { ConnectionSettings } from '../services/settings-service'
 
 // Global reactive state
 const state = reactive({
@@ -17,6 +17,23 @@ const state = reactive({
   isU2D2Scanning: false,
   isMotorScanning: false,
   selectedMotorId: null as number | null,
+  
+  // Background operations state
+  backgroundOperations: {
+    motorDiscovery: {
+      isRunning: false,
+      startTime: null as Date | null,
+      progress: 0,
+      currentId: 0
+    }
+  } as {
+    motorDiscovery: {
+      isRunning: boolean
+      startTime: Date | null
+      progress: number
+      currentId: number
+    }
+  },
   
   // Logs (limited to last 100 entries to prevent memory issues)
   logs: [] as Array<{
@@ -38,6 +55,20 @@ export function useDynamixelStore() {
     state.selectedU2D2Device = device
     state.connectionSettings = settings
     state.isConnectedToU2D2 = true
+    
+    // Save last connected device to settings (serialize only essential properties)
+    if (window.settingsAPI) {
+      const serializableDevice = {
+        type: device.type,
+        path: device.path,
+        displayName: device.displayName,
+        isU2D2: device.isU2D2,
+        // Don't save non-serializable properties like device handles
+      }
+      window.settingsAPI.set('lastConnectedDevice', serializableDevice).catch(error => {
+        console.error('Failed to save last connected device:', error)
+      })
+    }
   }
   
   const disconnect = () => {
@@ -108,6 +139,19 @@ export function useDynamixelStore() {
     logId = 0
   }
   
+  // Background operations management
+  const setMotorDiscoveryState = (isRunning: boolean, progress = 0, currentId = 0) => {
+    state.backgroundOperations.motorDiscovery.isRunning = isRunning
+    state.backgroundOperations.motorDiscovery.progress = progress
+    state.backgroundOperations.motorDiscovery.currentId = currentId
+    state.backgroundOperations.motorDiscovery.startTime = isRunning ? new Date() : null
+  }
+  
+  const updateMotorDiscoveryProgress = (progress: number, currentId: number) => {
+    state.backgroundOperations.motorDiscovery.progress = progress
+    state.backgroundOperations.motorDiscovery.currentId = currentId
+  }
+  
   // Computed properties
   const isConnected = computed(() => state.isConnectedToU2D2)
   const hasSelectedDevice = computed(() => state.selectedU2D2Device !== null)
@@ -147,6 +191,10 @@ export function useDynamixelStore() {
     addLog,
     clearLogs,
     
+    // Background operations
+    setMotorDiscoveryState,
+    updateMotorDiscoveryProgress,
+    
     // Computed properties
     isConnected,
     hasSelectedDevice,
@@ -181,7 +229,9 @@ export const {
   setMotorScanning,
   setSelectedMotorId,
   addLog,
-  clearLogs
+  clearLogs,
+  setMotorDiscoveryState,
+  updateMotorDiscoveryProgress
 } = globalStore
 
 // Export the store for component use

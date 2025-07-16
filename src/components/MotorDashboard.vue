@@ -1,5 +1,5 @@
 <template>
-  <div class="h-full flex flex-col space-y-4">
+  <div class="h-full flex flex-col space-y-4 overflow-y-auto pr-2">
     <!-- Motor Info Header -->
     <div class="bg-gray-800 rounded-lg p-4">
       <h2 class="text-white text-xl font-semibold mb-2 flex items-center">
@@ -182,7 +182,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useDynamixelStore } from './stores/dynamixelStore'
+import { useDynamixelStore } from '../stores/dynamixelStore'
 
 const props = defineProps<{
   motorId: number

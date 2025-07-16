@@ -20,7 +20,7 @@
       <!-- Device Selection -->
       <div class="flex items-center space-x-2">
         <select 
-          v-model="selectedDevice"
+          v-model="selectedDevicePath"
           @change="onDeviceSelected"
           :disabled="store.isConnectedToU2D2.value || store.isU2D2Scanning.value"
           class="flex-1 text-xs p-1.5 bg-white border border-gray-300 rounded focus:border-blue-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
@@ -29,9 +29,9 @@
           <option 
             v-for="(device, index) in store.u2d2Devices.value" 
             :key="index" 
-            :value="device"
+            :value="device.path"
           >
-            {{ device.name }} {{ device.type === 'serial' ? `(${device.path})` : '' }}
+            {{ device.name || device.displayName }} {{ device.type === 'serial' ? `(${device.path})` : '' }}
           </option>
         </select>
         
@@ -78,22 +78,36 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
-import { useDynamixelStore } from './stores/dynamixelStore'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { useDynamixelStore } from '../stores/dynamixelStore'
 
 const store = useDynamixelStore()
 
 // Local state
 const selectedDevice = ref(null)
+const selectedDevicePath = ref('')
 
-// Sync selectedDevice with store
+// Sync selectedDevice with store and update path
 watch(() => store.selectedU2D2Device.value, (newDevice) => {
   selectedDevice.value = newDevice
+  selectedDevicePath.value = newDevice?.path || ''
+  console.log('Store device changed:', newDevice?.displayName, 'Path:', selectedDevicePath.value)
 }, { immediate: true })
 
-// Update store when local selection changes
-watch(selectedDevice, (newDevice) => {
-  store.setSelectedU2D2Device(newDevice)
+// Update store when local selection changes (find device by path)
+watch(selectedDevicePath, (newPath) => {
+  if (!newPath) {
+    selectedDevice.value = null
+    store.setSelectedU2D2Device(null)
+    return
+  }
+  
+  const device = store.u2d2Devices.value.find(d => d.path === newPath)
+  if (device) {
+    selectedDevice.value = device
+    store.setSelectedU2D2Device(device)
+    console.log('Path selection changed, found device:', device.displayName)
+  }
 })
 
 // Utility function to create a clean, serializable copy of a device object
@@ -114,9 +128,13 @@ const serializeDevice = (device: any) => {
 const refreshDevices = async () => {
   if (store.isU2D2Scanning.value || store.isConnectedToU2D2.value) return
   
+  console.log('Refreshing U2D2 devices...')
   store.setU2D2Scanning(true)
   store.setU2D2Devices([])
-  store.setSelectedU2D2Device(null)
+  // Don't clear selected device if we're already connected (auto-connect case)
+  if (!store.isConnectedToU2D2.value) {
+    store.setSelectedU2D2Device(null)
+  }
   
   try {
     // Get U2D2-specific devices
@@ -130,12 +148,15 @@ const refreshDevices = async () => {
 }
 
 const onDeviceSelected = async () => {
-  if (!selectedDevice.value) return
+  // Find the device by the selected path
+  const device = store.u2d2Devices.value.find(d => d.path === selectedDevicePath.value)
+  if (!device) return
   
   try {
     // Create a clean, serializable copy of the device object
-    const cleanDevice = serializeDevice(selectedDevice.value)
+    const cleanDevice = serializeDevice(device)
     await window.dynamixelAPI.selectU2D2Device(cleanDevice)
+    console.log('Device selected via dropdown:', device.displayName)
   } catch (error) {
     console.error('Failed to select device:', error)
   }
@@ -190,6 +211,51 @@ const disconnectFromDevice = async () => {
 
 // Auto-discover devices on mount
 onMounted(() => {
-  refreshDevices()
+  console.log('U2D2DevicePanel mounted, connection state:', store.isConnectedToU2D2.value)
+  
+  // Setup auto-connect event listener first
+  if (window.dynamixelAPI && window.dynamixelAPI.onAutoConnectSuccess) {
+    console.log('Setting up auto-connect event listener')
+    window.dynamixelAPI.onAutoConnectSuccess(({ device, connectionSettings }) => {
+      console.log('Auto-connect event received:', device.displayName, 'Current connection state:', store.isConnectedToU2D2.value)
+      
+      // Update the store with the auto-connected device
+      store.setConnection(device, connectionSettings)
+      
+      // Update local selected device state
+      selectedDevice.value = device
+      selectedDevicePath.value = device.path
+      
+      // Ensure the device is in the U2D2 devices list
+      const currentDevices = store.u2d2Devices.value
+      const deviceExists = currentDevices.some(d => d.path === device.path)
+      if (!deviceExists) {
+        console.log('Adding auto-connected device to devices list')
+        store.setU2D2Devices([...currentDevices, device])
+      } else {
+        console.log('Auto-connected device already in devices list')
+      }
+      
+      console.log('Auto-connect UI update complete. Connected:', store.isConnectedToU2D2.value, 'Selected device:', selectedDevice.value?.displayName, 'Selected path:', selectedDevicePath.value)
+      console.log('Available devices in dropdown:', store.u2d2Devices.value.map(d => `${d.displayName} (${d.path})`).join(', '))
+    })
+  } else {
+    console.warn('Auto-connect API not available')
+  }
+  
+  // Then refresh devices (but only if not already connected)
+  if (!store.isConnectedToU2D2.value) {
+    console.log('Not connected, refreshing devices')
+    refreshDevices()
+  } else {
+    console.log('Already connected, skipping device refresh')
+  }
+})
+
+// Clean up event listeners on unmount
+onUnmounted(() => {
+  if (window.dynamixelAPI && window.dynamixelAPI.removeAllListeners) {
+    window.dynamixelAPI.removeAllListeners()
+  }
 })
 </script>

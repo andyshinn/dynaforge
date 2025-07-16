@@ -5,6 +5,6 @@
 </template>
 
 <script setup>
-import Layout from './Layout.vue'
+import Layout from './components/Layout.vue'
 console.log('👋 This message is being logged by "App.vue", included via Vite');
 </script>

@@ -1,5 +1,5 @@
 <template>
-  <div class="h-full flex flex-col space-y-4">
+  <div class="h-full flex flex-col space-y-4 overflow-y-auto pr-2">
     <!-- Motor Scan Section -->
     <div class="bg-gray-800 rounded-lg p-4">
       <h3 class="text-white font-semibold mb-3 flex items-center">
@@ -9,12 +9,37 @@
 
       <div class="flex flex-wrap gap-2 mb-3">
         <button
-          @click="scanForMotors"
-          :disabled="!store.isConnectedToU2D2.value || store.isMotorScanning.value"
+          @click="startBackgroundDiscovery"
+          :disabled="!store.isConnectedToU2D2.value || store.state.backgroundOperations.motorDiscovery.isRunning"
           class="px-3 py-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-500 text-white rounded text-sm"
         >
-          {{ store.isMotorScanning.value ? 'Scanning Motors...' : 'Scan for Motors' }}
+          {{ store.state.backgroundOperations.motorDiscovery.isRunning ? 'Scanning Motors...' : 'Scan for Motors' }}
         </button>
+        
+        <button
+          v-if="store.state.backgroundOperations.motorDiscovery.isRunning"
+          @click="cancelBackgroundDiscovery"
+          class="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-sm"
+        >
+          Cancel Scan
+        </button>
+      </div>
+
+      <!-- Progress indicator for background discovery -->
+      <div v-if="store.state.backgroundOperations.motorDiscovery.isRunning" class="mb-3">
+        <div class="text-sm text-gray-300 mb-2">
+          Scanning ID {{ store.state.backgroundOperations.motorDiscovery.currentId }}... 
+          ({{ store.state.backgroundOperations.motorDiscovery.progress }}%)
+        </div>
+        <div class="w-full bg-gray-700 rounded-full h-2">
+          <div 
+            class="bg-green-600 h-2 rounded-full transition-all duration-300"
+            :style="{ width: store.state.backgroundOperations.motorDiscovery.progress + '%' }"
+          ></div>
+        </div>
+        <div class="text-xs text-gray-400 mt-1">
+          Found {{ store.foundDevices.value.length }} motors so far...
+        </div>
       </div>
 
       <div v-if="store.foundDevices.value.length > 0" class="mb-3">
@@ -82,7 +107,7 @@
 
 <script setup lang="ts">
 import { ref, nextTick, onMounted, onUnmounted } from 'vue'
-import { useDynamixelStore } from './stores/dynamixelStore'
+import { useDynamixelStore } from '../stores/dynamixelStore'
 
 // Use global store instead of local state
 const store = useDynamixelStore()
@@ -143,13 +168,40 @@ const clearLogs = () => {
   store.clearLogs()
 }
 
+const emit = defineEmits(['navigate-to-page'])
+
 const selectMotor = (motorId) => {
   store.setSelectedMotorId(motorId)
-  // Emit event or use router to navigate to motor page
-  // For now, we'll let the Layout component handle this via the store
+  // Navigate to motor page
+  emit('navigate-to-page', 'Motor')
 }
 
 
+const startBackgroundDiscovery = async () => {
+  if (!store.isConnectedToU2D2.value || store.state.backgroundOperations.motorDiscovery.isRunning) return
+
+  try {
+    addLog('🤖 Starting background motor discovery...', 'info')
+    store.setFoundDevices([]) // Clear previous results
+    
+    // Start background discovery (non-blocking)
+    window.dynamixelAPI.startBackgroundDiscovery({ startId: 1, endId: 20 })
+    
+  } catch (error) {
+    addLog(`❌ Failed to start background discovery: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error')
+  }
+}
+
+const cancelBackgroundDiscovery = async () => {
+  try {
+    addLog('⏹️ Cancelling motor discovery...', 'info')
+    await window.dynamixelAPI.cancelBackgroundDiscovery()
+  } catch (error) {
+    addLog(`❌ Failed to cancel discovery: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error')
+  }
+}
+
+// Keep the old scan function as fallback
 const scanForMotors = async () => {
   if (!store.isConnectedToU2D2.value || store.isMotorScanning.value) return
 
@@ -284,6 +336,48 @@ onMounted(() => {
 
     window.dynamixelAPI.onDiscoveryProgress((_progress) => {
       // Progress updates are handled by onStatusUpdate
+    })
+
+    // Background discovery event listeners
+    window.dynamixelAPI.onBackgroundDiscoveryStarted?.((data) => {
+      store.setMotorDiscoveryState(true, 0, data.startId)
+      addLog(`🔍 Starting background scan (IDs ${data.startId}-${data.endId})...`, 'info')
+    })
+
+    window.dynamixelAPI.onBackgroundDiscoveryProgress?.((data) => {
+      store.updateMotorDiscoveryProgress(data.progress, data.currentId)
+      // Don't spam logs with every progress update
+    })
+
+    window.dynamixelAPI.onBackgroundDeviceFound?.((device) => {
+      // Add device to found devices list immediately
+      const currentDevices = store.foundDevices.value
+      const newDevices = [...currentDevices, device]
+      store.setFoundDevices(newDevices)
+      addLog(`🔍 Found device: ID ${device.id}, ${device.modelName} (Model: ${device.modelNumber})`, 'device')
+    })
+
+    window.dynamixelAPI.onBackgroundDiscoveryComplete?.((data) => {
+      store.setMotorDiscoveryState(false, 100, 0)
+      addLog(`✅ Background discovery complete! Found ${data.total} device(s)`, 'success')
+      
+      if (data.total === 0) {
+        addLog('❌ No DYNAMIXEL motors found. Please check:', 'warning')
+        addLog('   - DYNAMIXEL devices are connected to the bus', 'warning')
+        addLog('   - Power is supplied to the devices', 'warning')
+        addLog('   - Baud rate matches (default: 57600 for Protocol 2.0)', 'warning')
+        addLog('   - Device IDs are in the scanned range', 'warning')
+      }
+    })
+
+    window.dynamixelAPI.onBackgroundDiscoveryError?.((data) => {
+      store.setMotorDiscoveryState(false, 0, 0)
+      addLog(`❌ Background discovery failed: ${data.error}`, 'error')
+    })
+
+    window.dynamixelAPI.onBackgroundDiscoveryCancelled?.(() => {
+      store.setMotorDiscoveryState(false, 0, 0)
+      addLog('⏹️ Motor discovery cancelled', 'info')
     })
   }
 })

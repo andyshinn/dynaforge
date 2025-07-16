@@ -107,6 +107,7 @@ export class DynamixelService {
   private onDeviceFound?: (device: DeviceInfo) => void;
   private onProgress?: (progress: DiscoveryProgress) => void;
   private onStatusUpdate?: (message: string, type: StatusType) => void;
+  private controllerPopulated = false;
 
   constructor() {
     // Controller will be created when we have settings
@@ -363,6 +364,7 @@ export class DynamixelService {
     try {
       this.onStatusUpdate?.('🔌 Disconnecting...', 'info');
       await this.controller.disconnect();
+      this.controllerPopulated = false; // Reset populated flag
       this.onStatusUpdate?.('👋 Disconnected successfully', 'success');
     } catch (error) {
       const errorMsg = `Disconnect failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
@@ -397,6 +399,9 @@ export class DynamixelService {
       // Log device count in controller for debugging
       const controllerDevices = this.controller.getAllDevices();
       this.onStatusUpdate?.(`   Controller now has ${controllerDevices.length} devices available`, 'info');
+
+      // Mark controller as populated
+      this.controllerPopulated = true;
 
       return discoveredDevices.map(device => ({
         id: device.id,
@@ -436,6 +441,7 @@ export class DynamixelService {
       return null;
     }
   }
+
 
   public async testDevice(id: number): Promise<void> {
     if (!this.isConnected) {
@@ -575,11 +581,26 @@ export class DynamixelService {
     }
 
     try {
-      const devices = this.controller.getAllDevices();
-      const device = devices.find(d => d.id === id);
+      let devices = this.controller.getAllDevices();
+      let device = devices.find(d => d.id === id);
+      
+      // If device not found in controller, try to add it via single device discovery
+      if (!device) {
+        log.info(`Motor ${id} not in controller list for LED control, attempting to add it...`);
+        const discoveredDevices = await this.controller.discoverDevices({
+          range: [id],
+          timeout: 100
+        });
+        
+        if (discoveredDevices.length > 0) {
+          // Refresh the devices list and try again
+          devices = this.controller.getAllDevices();
+          device = devices.find(d => d.id === id);
+        }
+      }
       
       if (!device) {
-        throw new Error(`Motor ${id} not found. Please discover motors first.`);
+        throw new Error(`Motor ${id} not found or not responding.`);
       }
 
       await device.setLED(ledOn);
@@ -598,11 +619,26 @@ export class DynamixelService {
     }
 
     try {
-      const devices = this.controller.getAllDevices();
-      const device = devices.find(d => d.id === id);
+      let devices = this.controller.getAllDevices();
+      let device = devices.find(d => d.id === id);
+      
+      // If device not found in controller, try to add it via single device discovery
+      if (!device) {
+        log.info(`Motor ${id} not in controller list, attempting to add it...`);
+        const discoveredDevices = await this.controller.discoverDevices({
+          range: [id],
+          timeout: 100
+        });
+        
+        if (discoveredDevices.length > 0) {
+          // Refresh the devices list and try again
+          devices = this.controller.getAllDevices();
+          device = devices.find(d => d.id === id);
+        }
+      }
       
       if (!device) {
-        throw new Error(`Motor ${id} not found. Please discover motors first.`);
+        throw new Error(`Motor ${id} not found or not responding.`);
       }
 
       this.onStatusUpdate?.(`📡 Pinging motor ${id}...`, 'info');
@@ -622,11 +658,26 @@ export class DynamixelService {
     }
 
     try {
-      const devices = this.controller.getAllDevices();
-      const device = devices.find(d => d.id === id);
+      let devices = this.controller.getAllDevices();
+      let device = devices.find(d => d.id === id);
+      
+      // If device not found in controller, try to add it via single device discovery
+      if (!device) {
+        log.info(`Motor ${id} not in controller list for status read, attempting to add it...`);
+        const discoveredDevices = await this.controller.discoverDevices({
+          range: [id],
+          timeout: 100
+        });
+        
+        if (discoveredDevices.length > 0) {
+          // Refresh the devices list and try again
+          devices = this.controller.getAllDevices();
+          device = devices.find(d => d.id === id);
+        }
+      }
       
       if (!device) {
-        throw new Error(`Motor ${id} not found. Please discover motors first.`);
+        throw new Error(`Motor ${id} not found or not responding.`);
       }
 
       this.onStatusUpdate?.(`📊 Reading status from motor ${id}...`, 'info');
@@ -682,11 +733,30 @@ export class DynamixelService {
     }
 
     try {
-      const devices = this.controller.getAllDevices();
-      const device = devices.find(d => d.id === id);
+      let devices = this.controller.getAllDevices();
+      let device = devices.find(d => d.id === id);
+      
+      // If device not found in controller, run discovery to populate the controller (once)
+      if (!device) {
+        if (!this.controllerPopulated) {
+          log.info(`Motor ${id} not in controller list. Running quick discovery to populate controller...`);
+          log.info(`Current devices in controller: ${devices.map(d => d.id).join(', ')}`);
+          
+          // Run quick discovery to populate controller's device list
+          await this.quickDiscovery();
+          
+          // Refresh the devices list and try again
+          devices = this.controller.getAllDevices();
+          device = devices.find(d => d.id === id);
+          log.info(`After quick discovery - devices in controller: ${devices.map(d => d.id).join(', ')}`);
+          log.info(`Found target device: ${device ? 'YES' : 'NO'}`);
+        } else {
+          log.info(`Motor ${id} not found and controller already populated. Device may not exist.`);
+        }
+      }
       
       if (!device) {
-        throw new Error(`Motor ${id} not found. Please discover motors first.`);
+        throw new Error(`Motor ${id} not found or not responding.`);
       }
 
       if (position < 0 || position > 4095) {
@@ -733,11 +803,26 @@ export class DynamixelService {
     }
 
     try {
-      const devices = this.controller.getAllDevices();
-      const device = devices.find(d => d.id === id);
+      let devices = this.controller.getAllDevices();
+      let device = devices.find(d => d.id === id);
+      
+      // If device not found in controller, try to add it via single device discovery
+      if (!device) {
+        log.info(`Motor ${id} not in controller list for emergency stop, attempting to add it...`);
+        const discoveredDevices = await this.controller.discoverDevices({
+          range: [id],
+          timeout: 100
+        });
+        
+        if (discoveredDevices.length > 0) {
+          // Refresh the devices list and try again
+          devices = this.controller.getAllDevices();
+          device = devices.find(d => d.id === id);
+        }
+      }
       
       if (!device) {
-        throw new Error(`Motor ${id} not found. Please discover motors first.`);
+        throw new Error(`Motor ${id} not found or not responding.`);
       }
 
       // Emergency stop by disabling torque

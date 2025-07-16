@@ -134,18 +134,24 @@
         <p class="mt-2 text-gray-600">Discover and test DYNAMIXEL devices connected to your U2D2 interface.</p>
       </div>
 
+      <div v-if="currentPage === 'Remote Control'" class="flex-shrink-0 px-4 sm:px-6 lg:px-8 py-6 border-b border-gray-200">
+        <h1 class="text-2xl font-bold text-gray-900">Remote Control</h1>
+        <p class="mt-2 text-gray-600">Connect motors over the Internet using UDP with STUN/TURN NAT traversal.</p>
+      </div>
+
       <div v-if="currentPage === 'Settings'" class="flex-shrink-0 px-4 sm:px-6 lg:px-8 py-6 border-b border-gray-200">
         <h1 class="text-2xl font-bold text-gray-900">Settings</h1>
         <p class="mt-2 text-gray-600">Configure connection settings and application preferences.</p>
       </div>
 
-      <div v-if="currentPage !== 'Discovery' && currentPage !== 'Settings'" class="flex-shrink-0 px-4 sm:px-6 lg:px-8 py-6 border-b border-gray-200">
+      <div v-if="currentPage !== 'Discovery' && currentPage !== 'Remote Control' && currentPage !== 'Settings'" class="flex-shrink-0 px-4 sm:px-6 lg:px-8 py-6 border-b border-gray-200">
         <h1 class="text-2xl font-bold text-gray-900">{{ currentPage }}</h1>
         <p class="mt-2 text-gray-600">This section is under development.</p>
       </div>
 
       <div class="flex-1 px-4 sm:px-6 lg:px-8 py-4 overflow-hidden">
-        <DiscoveryComponent v-if="currentPage === 'Discovery'" />
+        <DiscoveryComponent v-if="currentPage === 'Discovery'" @navigate-to-page="setCurrentPage" />
+        <RemoteControlComponent v-else-if="currentPage === 'Remote Control'" />
         <SettingsComponent v-else-if="currentPage === 'Settings'" />
         <MotorDashboard v-else-if="currentPage === 'Motor' && store.selectedMotorId.value" :motorId="store.selectedMotorId.value" />
         <div v-else class="h-full flex items-center justify-center text-gray-500">
@@ -172,16 +178,19 @@ import {
   MagnifyingGlassIcon,
   XMarkIcon,
   Cog6ToothIcon,
+  SignalIcon,
 } from '@heroicons/vue/24/outline'
 import DiscoveryComponent from './DiscoveryComponent.vue'
 import SettingsComponent from './SettingsComponent.vue'
 import MotorDashboard from './MotorDashboard.vue'
 import U2D2DevicePanel from './U2D2DevicePanel.vue'
-import { useDynamixelStore } from './stores/dynamixelStore'
-import dynaForgeLogo from './assets/dynaforge.png'
+import RemoteControlComponent from './RemoteControlComponent.vue'
+import { useDynamixelStore } from '../stores/dynamixelStore'
+import dynaForgeLogo from '../assets/dynaforge.png'
 
 const navigation = [
   { name: 'Discovery', href: '#', icon: MagnifyingGlassIcon, current: true },
+  { name: 'Remote Control', href: '#', icon: SignalIcon, current: false },
   { name: 'Settings', href: '#', icon: Cog6ToothIcon, current: false },
 ]
 const sidebarOpen = ref(false)
