@@ -652,7 +652,7 @@ export class DynamixelService {
     }
   }
 
-  public async readMotorStatus(id: number): Promise<{temperature: number, voltage: number, position: number}> {
+  public async readMotorStatus(id: number): Promise<{temperature: number, voltage: number, position: number, goalCurrent: number}> {
     if (!this.isConnected) {
       throw new Error('Not connected to U2D2 device');
     }
@@ -686,6 +686,7 @@ export class DynamixelService {
       let temperature = 0;
       let voltage = 0;
       let position = 0;
+      let goalCurrent = 0;
 
       try {
         temperature = await device.getPresentTemperature();
@@ -712,12 +713,21 @@ export class DynamixelService {
         throw new Error(`Position read failed: ${positionError instanceof Error ? positionError.message : 'Unknown error'}`);
       }
 
+      try {
+        goalCurrent = await device.getGoalCurrent();
+        this.onStatusUpdate?.(`   Goal Current: ${goalCurrent} mA)`, 'success');
+      } catch (goalCurrentError) {
+        this.onStatusUpdate?.(`   Could not read Goal Current: ${goalCurrentError instanceof Error ? goalCurrentError.message : 'Unknown error'}`, 'warning');
+        throw new Error(`Goal Current read failed: ${goalCurrentError instanceof Error ? goalCurrentError.message : 'Unknown error'}`);
+      }
+
       this.onStatusUpdate?.(`📊 Status read complete for motor ${id}`, 'success');
       
       return {
         temperature,
         voltage,
-        position
+        position,
+        goalCurrent
       };
     } catch (error) {
       const errorMsg = `Status read failed for motor ${id}: ${error instanceof Error ? error.message : 'Unknown error'}`;
@@ -725,6 +735,12 @@ export class DynamixelService {
       this.onStatusUpdate?.(errorMsg, 'error');
       throw error;
     }
+  }
+
+  public async setMotorGoalCurrent(id: number, goalCurrent: number): Promise<void> {
+      let devices = this.controller.getAllDevices();
+      let device = devices.find(d => d.id === id);
+      await device.setGoalCurrent(goalCurrent);
   }
 
   public async moveMotorToPosition(id: number, position: number): Promise<void> {
