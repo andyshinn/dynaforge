@@ -11,10 +11,16 @@ const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
     icon: 'src/assets/dynaforge-icon-regular-adaptive',
-    ignore: [],
     name: 'dynaforge',
     executableName: 'Dynaforge',
-    osxSign: {},
+    osxSign: {
+      identity: process.env.APPLE_IDENTITY || 'Developer ID Application',
+    },
+    osxNotarize: {
+      appleApiKey: process.env.APPLE_API_KEY_PATH || `~/private_keys/AuthKey_${process.env.APPLE_API_KEY_ID}.p8`,
+      appleApiKeyId: process.env.APPLE_API_KEY_ID!,
+      appleApiIssuer: process.env.APPLE_API_ISSUER!,
+    },
   },
   rebuildConfig: {},
   makers: [
