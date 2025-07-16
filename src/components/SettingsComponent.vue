@@ -270,7 +270,8 @@ const baudRates = [
   { value: 57600, label: '57600 (Recommended)' },
   { value: 115200, label: '115200' },
   { value: 1000000, label: '1000000' },
-  { value: 2000000, label: '2000000' }
+  { value: 2000000, label: '2000000' },
+  { value: 3000000, label: '3000000' }
 ]
 
 const defaultSettings: Settings = {
