@@ -274,6 +274,7 @@ ipcMain.handle('dynamixel-start-background-discovery', async (_event, options = 
     }
     
     const { startId = 1, endId = 20 } = options;
+    // const { startId = 100, endId = 120 } = options;
     
     // Signal discovery start
     mainWindow.webContents.send('background-discovery-started', { startId, endId });
@@ -428,6 +429,20 @@ ipcMain.handle('dynamixel-read-motor-status', async (_event, id: number) => {
     return await dynamixelService.readMotorStatus(id);
   } catch (error) {
     log.error('Motor status read failed:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('dynamixel-set-motor-goal-current', async (_event, id: number, goalCurrent: number) => {
+  try {
+    if (!dynamixelService) {
+      log.error('DYNAMIXEL service not initialized');
+      throw new Error('DYNAMIXEL service not initialized');
+    }
+    await dynamixelService.setMotorGoalCurrent(id, goalCurrent);
+    return true;
+  } catch (error) {
+    log.error('Motor set goal current failed:', error);
     throw error;
   }
 });

@@ -44,6 +44,7 @@ contextBridge.exposeInMainWorld('dynamixelAPI', {
   controlLED: (id: number, ledOn: boolean) => ipcRenderer.invoke('dynamixel-control-led', id, ledOn),
   pingMotor: (id: number) => ipcRenderer.invoke('dynamixel-ping-motor', id),
   readMotorStatus: (id: number) => ipcRenderer.invoke('dynamixel-read-motor-status', id),
+  setMotorGoalCurrent: (id: number, goalCurrent: number) => ipcRenderer.invoke('dynamixel-set-motor-goal-current', id, goalCurrent),
   moveMotorToPosition: (id: number, position: number) => ipcRenderer.invoke('dynamixel-move-motor-to-position', id, position),
   emergencyStop: (id: number) => ipcRenderer.invoke('dynamixel-emergency-stop', id),
   enableTorqueForAllMotors: () => ipcRenderer.invoke('dynamixel-enable-torque-all'),

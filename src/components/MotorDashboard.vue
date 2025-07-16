@@ -125,6 +125,66 @@
       </div>
     </div>
 
+    <!-- Goal Current Control -->
+    <div class="bg-gray-800 rounded-lg p-4">
+      <h3 class="text-white font-semibold mb-3 flex items-center">
+        <span class="mr-2">🔌</span>
+        Goal Current Control
+      </h3>
+      
+      <div class="space-y-3">
+        <div class="flex items-center space-x-3">
+          <label class="text-gray-300 text-sm w-20">Goal Current:</label>
+          <input
+            v-model.number="targetGoalCurrent"
+            type="number"
+            min="0"
+            max="910"
+            class="flex-1 p-2 bg-gray-700 text-white rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
+            placeholder="0-910"
+          />
+          <button
+            @click="setGoalCurrent"
+            :disabled="!store.isConnectedToU2D2.value"
+            class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-500 text-white rounded text-sm"
+          >
+            Set
+          </button>
+        </div>
+        
+        <div class="flex space-x-2">
+          <button
+            @click="setGoalCurrent(0)"
+            :disabled="!store.isConnectedToU2D2.value"
+            class="flex-1 px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-500 text-white rounded text-sm"
+          >
+            0mA
+          </button>
+          <button
+            @click="setGoalCurrent(200)"
+            :disabled="!store.isConnectedToU2D2.value"
+            class="flex-1 px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-500 text-white rounded text-sm"
+          >
+            200mA
+          </button>
+          <button
+            @click="setGoalCurrent(500)"
+            :disabled="!store.isConnectedToU2D2.value"
+            class="flex-1 px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-500 text-white rounded text-sm"
+          >
+            500mA
+          </button>
+          <button
+            @click="setGoalCurrent(910)"
+            :disabled="!store.isConnectedToU2D2.value"
+            class="flex-1 px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-500 text-white rounded text-sm"
+          >
+            910mA
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Motor Status -->
     <div class="bg-gray-800 rounded-lg p-4">
       <h3 class="text-white font-semibold mb-3 flex items-center">
@@ -132,7 +192,7 @@
         Motor Status
       </h3>
       
-      <div v-if="motorStatus" class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+      <div v-if="motorStatus" class="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
         <div class="bg-gray-700 p-3 rounded">
           <div class="text-gray-400">Temperature</div>
           <div class="text-white text-lg font-semibold">{{ motorStatus.temperature }}°C</div>
@@ -144,6 +204,10 @@
         <div class="bg-gray-700 p-3 rounded">
           <div class="text-gray-400">Position</div>
           <div class="text-white text-lg font-semibold">{{ motorStatus.position }} ({{ motorStatus.angle }}°)</div>
+        </div>
+        <div class="bg-gray-700 p-3 rounded">
+          <div class="text-gray-400">Goal Current</div>
+          <div class="text-white text-lg font-semibold">{{ motorStatus.goalCurrent }}mA</div>
         </div>
       </div>
       <div v-else class="text-gray-500 text-sm">
@@ -193,11 +257,13 @@ const store = useDynamixelStore()
 // Local state
 const ledOn = ref(false)
 const targetPosition = ref(2048)
+const targetGoalCurrent = ref(910)
 const motorStatus = ref<{
   temperature: number
   voltage: number
   position: number
   angle: number
+  goalCurrent: number
 } | null>(null)
 
 const motorLogs = ref<Array<{
@@ -285,11 +351,30 @@ const readStatus = async () => {
       temperature: status.temperature,
       voltage: status.voltage,
       position: status.position,
-      angle: Math.round((status.position / 4095) * 360 * 10) / 10
+      angle: Math.round((status.position / 4095) * 360 * 10) / 10,
+      goalCurrent: status.goalCurrent
     }
     addMotorLog(`Status: ${status.temperature}°C, ${status.voltage}V, ${status.position} pos`, 'success')
   } catch (error) {
     addMotorLog(`Status read failed: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error')
+  }
+}
+
+const setGoalCurrent = async (goalCurrent?: number) => {
+  if (!store.isConnectedToU2D2.value) return
+
+  const gc = goalCurrent !== undefined ? goalCurrent : targetGoalCurrent.value
+  if (gc < 0 || gc > 910) {
+    addMotorLog('Goal Current must be between 0 and 910', 'warning')
+    return
+  }
+
+  try {
+    addMotorLog(`Setting Goal Current ${gc}mA...`, 'info')
+    await window.dynamixelAPI.setMotorGoalCurrent(props.motorId, gc)
+    addMotorLog(`Goal current command sent`, 'success')
+  } catch (error) {
+    addMotorLog(`Setting goal current failed: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error')
   }
 }
 
